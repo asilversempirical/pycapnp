@@ -48,6 +48,8 @@ def test_simple_rpc_with_options():
 
     restorer = SimpleRestorer()
     server = capnp.TwoPartyServer(write, restorer)
+    # This traversal limit is too low to receive the response in, so we expect
+    # an exception during the call.
     client = capnp.TwoPartyClient(read, traversal_limit_in_words=1)
 
     ref = test_capability_capnp.TestSturdyRefObjectId.new_message(tag='testInterface')
@@ -55,9 +57,8 @@ def test_simple_rpc_with_options():
     cap = cap.cast_as(test_capability_capnp.TestInterface)
 
     remote = cap.foo(i=5)
-    response = remote.wait()
-
-    assert response.x == '125'
+    with pytest.raises(capnp.KjException):
+        response = remote.wait()
 
 
 def test_simple_rpc_restore_func():
