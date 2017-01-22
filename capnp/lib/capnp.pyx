@@ -2217,9 +2217,16 @@ cdef class _TwoPartyVatNetwork:
     cdef Own[C_TwoPartyVatNetwork] thisptr
     cdef _AsyncIoStream stream
 
-    cdef _init(self, _AsyncIoStream stream, Side side):
+    cdef _init(self, _AsyncIoStream stream, Side side, traversal_limit_in_words, nesting_limit):
+        cdef schema_cpp.ReaderOptions opts
+
+        if traversal_limit_in_words is not None:
+            opts.traversalLimitInWords = traversal_limit_in_words
+        if nesting_limit is not None:
+            opts.nestingLimit = nesting_limit
+
         self.stream = stream
-        self.thisptr = makeTwoPartyVatNetwork(deref(stream.thisptr), side)
+        self.thisptr = makeTwoPartyVatNetwork(deref(stream.thisptr), side, opts)
         return self
 
     cpdef on_disconnect(self) except +reraise_kj_exception:
@@ -2244,13 +2251,13 @@ cdef class TwoPartyClient:
     cdef public _Restorer _restorer
     cdef public _AsyncIoStream _stream
 
-    def __init__(self, socket, restorer=None):
+    def __init__(self, socket, restorer=None, traversal_limit_in_words=None, nesting_limit=None):
         if isinstance(socket, basestring):
             socket = self._connect(socket)
 
         self._orig_stream = socket
         self._stream = _FdAsyncIoStream(socket.fileno())
-        self._network = _TwoPartyVatNetwork()._init(self._stream, capnp.CLIENT)
+        self._network = _TwoPartyVatNetwork()._init(self._stream, capnp.CLIENT, traversal_limit_in_words, nesting_limit)
         if restorer is None:
             self.thisptr = new RpcSystem(makeRpcClient(deref(self._network.thisptr)))
             self._restorer = None
@@ -2340,7 +2347,8 @@ cdef class TwoPartyServer:
     cdef capnp.TaskSet * _task_set
     cdef capnp.ErrorHandler _error_handler
 
-    def __init__(self, socket, restorer=None, server_socket=None, bootstrap=None):
+    def __init__(self, socket, restorer=None, server_socket=None, bootstrap=None,
+                 traversal_limit_in_words=None, nesting_limit=None):
         if not restorer and not bootstrap:
             raise KjException("You must provide either a bootstrap interface or a restorer (deperecated) to a server constructor.")
 
@@ -2355,7 +2363,7 @@ cdef class TwoPartyServer:
             self._stream = _FdAsyncIoStream(socket.fileno())
             self._server_socket = server_socket
             self._port = 0
-            self._network = _TwoPartyVatNetwork()._init(self._stream, capnp.SERVER)
+            self._network = _TwoPartyVatNetwork()._init(self._stream, capnp.SERVER, traversal_limit_in_words, nesting_limit)
 
             if bootstrap:
                 self._bootstrap = bootstrap
